@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rondes - Planning Visites</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f8f9fa;
+            margin: 0;
+            padding: 20px 16px;
+            color: #212529;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 520px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.07);
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 20px 24px 16px;
+            text-align: center;
+            background: #f1f3f5;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        #date {
+            margin: 6px 0 0;
+            color: #6c757d;
+            font-size: 0.95rem;
+        }
+
+        .today-section {
+            padding: 20px 24px;
+        }
+
+        .building-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 0;
+            font-size: 1.15rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .building-item:last-child {
+            border-bottom: none;
+        }
+
+        input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            margin-right: 16px;
+            accent-color: #28a745;
+        }
+
+        .done {
+            color: #28a745;
+            text-decoration: line-through;
+            opacity: 0.85;
+        }
+
+        .weekend {
+            text-align: center;
+            padding: 40px 20px;
+            color: #dc3545;
+            font-size: 1.2rem;
+        }
+
+        .progress-section {
+            padding: 16px 24px 24px;
+            background: #f8f9fa;
+        }
+
+        .progress-title {
+            font-size: 0.95rem;
+            color: #6c757d;
+            margin: 0 0 12px 0;
+            text-align: center;
+        }
+
+        .buildings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+            gap: 10px;
+        }
+
+        .building-case {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.28s ease;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .building-case:hover {
+            transform: scale(1.06);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        .visited {
+            background: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+
+        .not-visited {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+
+        .reset-btn {
+            margin: 20px 24px;
+            padding: 12px;
+            width: calc(100% - 48px);
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .reset-btn:hover {
+            background: #0b5ed7;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Rondes du jour</h1>
+        <div id="date"></div>
+    </div>
+
+    <div id="todaySection" class="today-section"></div>
+
+    <div class="progress-section">
+        <div class="progress-title">État d'avancement du mois (35 bâtiments)</div>
+        <div class="buildings-grid" id="grid"></div>
+    </div>
+
+    <button class="reset-btn" id="resetBtn">Réinitialiser le mois</button>
+</div>
+
+<script>
+const BUILDINGS = [
+    "0001","0006","0007","0008","0009","0010","0011","0014","0015","0016",
+    "0041","0044","0056","0065","0067","0068","0069","0071","0072","0075",
+    "0076","0081","0085","0088","0089","0091","0092","0093","0094","0095",
+    "0149","0155","0157","0239","0270"
+];
+
+const STORAGE_MONTH = 'ronde_month';
+const STORAGE_SHUFFLE = 'ronde_shuffled';
+const STORAGE_COMPLETED = 'ronde_completed';
+
+let shuffled = [];
+let completed = new Set();
+
+function shuffleArray(arr) {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
+function getMonthKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${d.getMonth()+1}`;
+}
+
+function isWeekend() {
+    return new Date().getDay() === 0 || new Date().getDay() === 6;
+}
+
+function getWorkdayIndex() {
+    const today = new Date();
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    let count = 0;
+    for (let d = new Date(first); d <= today; d.setDate(d.getDate() + 1)) {
+        if (d.getDay() >= 1 && d.getDay() <= 5) count++;
+    }
+    return count - 1;
+}
+
+function loadData() {
+    const current = getMonthKey();
+    const savedMonth = localStorage.getItem(STORAGE_MONTH);
+
+    if (savedMonth !== current) {
+        shuffled = shuffleArray(BUILDINGS);
+        completed.clear();
+        localStorage.setItem(STORAGE_MONTH, current);
+        localStorage.setItem(STORAGE_SHUFFLE, JSON.stringify(shuffled));
+        localStorage.setItem(STORAGE_COMPLETED, '[]');
+    } else {
+        shuffled = JSON.parse(localStorage.getItem(STORAGE_SHUFFLE) || '[]');
+        completed = new Set(JSON.parse(localStorage.getItem(STORAGE_COMPLETED) || '[]'));
+    }
+}
+
+function saveCompleted() {
+    localStorage.setItem(STORAGE_COMPLETED, JSON.stringify([...completed]));
+}
+
+function getTodays() {
+    if (isWeekend()) return [];
+    const idx = getWorkdayIndex();
+    const available = shuffled.filter(b => !completed.has(b));
+    return available.slice(0, 2);
+}
+
+function renderToday() {
+    const section = document.getElementById('todaySection');
+    section.innerHTML = '';
+
+    if (isWeekend()) {
+        section.innerHTML = '<div class="weekend">Week-end – Pas de ronde aujourd’hui</div>';
+        return;
+    }
+
+    const todays = getTodays();
+
+    if (todays.length === 0) {
+        section.innerHTML = '<div style="text-align:center;padding:30px;color:#6c757d;">Toutes les rondes du mois sont terminées !</div>';
+        return;
+    }
+
+    todays.forEach(b => {
+        const item = document.createElement('div');
+        item.className = 'building-item';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = completed.has(b);
+        cb.addEventListener('change', () => {
+            if (cb.checked) completed.add(b);
+            else completed.delete(b);
+            saveCompleted();
+            renderGrid();
+        });
+
+        const span = document.createElement('span');
+        span.textContent = b;
+        if (cb.checked) span.className = 'done';
+
+        item.append(cb, span);
+        section.appendChild(item);
+    });
+}
+
+function renderGrid() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    shuffled.forEach(b => {
+        const el = document.createElement('div');
+        el.className = 'building-case';
+        el.textContent = b;
+        el.classList.toggle('visited', completed.has(b));
+        el.classList.toggle('not-visited', !completed.has(b));
+        grid.appendChild(el);
+    });
+}
+
+function init() {
+    loadData();
+
+    document.getElementById('date').textContent = 
+        new Date().toLocaleDateString('fr-FR', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+        });
+
+    renderToday();
+    renderGrid();
+
+    document.getElementById('resetBtn').onclick = () => {
+        if (confirm("Vraiment réinitialiser tout le mois ?")) {
+            localStorage.clear();
+            location.reload();
+        }
+    };
+}
+
+init();
+</script>
+</body>
+</html>
